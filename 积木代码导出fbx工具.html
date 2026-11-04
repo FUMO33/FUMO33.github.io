@@ -1,0 +1,951 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>积木代码工具</title>
+<style>
+  :root { --bg:#f4f2ee; --panel:#fff; --text:#222; --muted:#666; --accent:#8e6ccf; --border:#ddd; --stage:#e9e6f1; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1d1f23; --panel:#2a2d33; --text:#eee; --muted:#aaa; --border:#444; --stage:#30323a; } }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.6 "Microsoft YaHei", "Yu Gothic UI", "Meiryo", system-ui, sans-serif; }
+  main { max-width:860px; margin:0 auto; padding:24px 16px 48px; }
+  header { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:8px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  h2 { font-size:17px; margin:28px 0 6px; }
+  p.hint { color:var(--muted); margin:0 0 12px; }
+  textarea { width:100%; box-sizing:border-box; height:110px; font:12px/1.4 Consolas, monospace; padding:8px; border:1px solid var(--border); border-radius:8px; background:var(--panel); color:var(--text); }
+  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:10px 0; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:7px 16px; font-size:15px; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--accent); border:1px solid var(--accent); }
+  button:disabled { opacity:.4; cursor:default; }
+  .langs button { padding:3px 10px; font-size:13px; }
+  .langs button.on { background:var(--accent); color:#fff; }
+  label { color:var(--muted); }
+  .row > label { min-width:0; max-width:100%; }
+  select, input[type=range] { vertical-align:middle; max-width:100%; }
+  select, input[type=number] { padding:4px; border-radius:6px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px; }
+  input[type=number] { width:80px; }
+  .msg { min-height:1.6em; }
+  .msg.err { color:#d33; }
+  .stage { background:var(--stage); border:1px solid var(--border); border-radius:10px; overflow:hidden; touch-action:none; }
+  canvas#view { display:block; width:100%; height:auto; cursor:grab; }
+  canvas#view:active { cursor:grabbing; }
+  .small { font-size:13px; color:var(--muted); }
+  .box { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:4px 14px 8px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1 data-t="title">积木代码工具</h1>
+    <div class="langs row"><button class="ghost" data-lang="zh">中文</button><button class="ghost" data-lang="ja">日本語</button><button class="ghost" data-lang="en">English</button></div>
+  </header>
+  <p class="hint" data-th="intro"></p>
+
+  <textarea id="code" placeholder="BLK1:..."></textarea>
+  <div class="row">
+    <button id="go" data-t="go">预览</button>
+    <button id="png" class="ghost" disabled data-t="png">下载图片</button>
+    <button id="vox" class="ghost" disabled data-t="dlVox"></button>
+    <button id="obj" class="ghost" disabled data-t="dlObj"></button>
+    <label><span data-t="image"></span> <select id="pngSize"><option value="1024">1024 px</option><option value="2048" selected>2048 px</option><option value="4096">4096 px</option></select></label>
+    <label><span data-t="bg"></span> <select id="pngBg"><option value="clear" selected data-t="clear"></option><option value="light" data-t="light"></option><option value="dark" data-t="dark"></option></select></label>
+  </div>
+  <div id="msg" class="msg"></div>
+
+  <div class="stage"><canvas id="view" width="1280" height="860"></canvas></div>
+  <div class="row">
+    <button class="ghost" data-view="front" data-t="front"></button>
+    <button class="ghost" data-view="right" data-t="right"></button>
+    <button class="ghost" data-view="back" data-t="back"></button>
+    <button class="ghost" data-view="left" data-t="left"></button>
+    <button class="ghost" data-view="top" data-t="top"></button>
+    <button class="ghost" data-view="iso" data-t="iso"></button>
+    <label><span data-t="zoom"></span> <input id="zoom" type="range" min="0.4" max="3" step="0.05" value="1"></label>
+    <label><input id="grid" type="checkbox" checked> <span data-t="plate"></span></label>
+  </div>
+  <p class="small" data-t="dragHint"></p>
+
+  <h2 data-t="fbxTitle"></h2>
+  <div class="box">
+    <p class="hint" data-t="fbxHint"></p>
+    <div class="row">
+      <label><span data-t="cube"></span> <select id="fbxSize">
+        <option value="0.15" selected data-t="c15"></option>
+        <option value="0.025" data-t="c25"></option>
+        <option value="0.1" data-t="c10"></option>
+        <option value="1" data-t="c100"></option>
+        <option value="custom" data-t="cCustom"></option>
+      </select></label>
+      <label id="fbxCustomBox" hidden><input id="fbxCustom" type="number" min="0.1" max="10000" step="0.1" value="15"> cm</label>
+    </div>
+    <div class="row">
+      <label><span data-t="color"></span> <select id="fbxMode">
+        <option value="texture" selected data-t="mTex"></option>
+        <option value="materials" data-t="mMat"></option>
+      </select></label>
+    </div>
+    <div class="row">
+      <label><span data-t="origin"></span> <select id="fbxOrigin">
+        <option value="blocks" selected data-t="oBlocks"></option>
+        <option value="plate" data-t="oPlate"></option>
+      </select></label>
+      <label><input id="fbxMerge" type="checkbox" checked> <span data-t="merge"></span></label>
+    </div>
+    <div class="row"><button id="fbx" disabled data-t="fbx"></button></div>
+    <div id="fbxMsg" class="msg"></div>
+    <p class="small" data-th="fbxNote"></p>
+  </div>
+
+  <h2 data-t="voxTitle"></h2>
+  <p class="hint" data-t="voxHint"></p>
+  <div class="row"><input id="voxFile" type="file" accept=".vox"></div>
+  <textarea id="voxOut" readonly></textarea>
+  <div class="row"><button id="copy" class="ghost" disabled data-t="copy"></button><button id="voxPreview" class="ghost" disabled data-t="voxPreview"></button></div>
+  <div id="voxMsg" class="msg"></div>
+</main>
+<script>
+"use strict";
+// ================================================================ core (no DOM; the test harness loads the page and calls these)
+class CodeError extends Error { constructor(key, args) { super(key); this.key = key; this.args = args || {}; } }
+
+// ---------------------------------------------------------------- BK1 format (same as the Udon script)
+// 'B' 'K' '1' version | w u16 | h u16 | d u16 | K | K x RGB | PackBits of palette indices, cell x + w*(z + d*y)
+function decodeBlk(text) {
+  let s = text.trim().replace(/\s+/g, "");
+  if (s.slice(0, 5).toUpperCase() === "BLK1:") s = s.slice(5);
+  if (!s || s.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(s)) throw new CodeError("eInvalid");
+  const bin = atob(s);
+  const b = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i);
+  if (b.length < 11 || b[0] !== 66 || b[1] !== 75 || b[2] !== 49 || b[3] !== 1) throw new CodeError("eInvalid");
+  const w = b[4] | (b[5] << 8), h = b[6] | (b[7] << 8), d = b[8] | (b[9] << 8), k = b[10];
+  if (w < 1 || h < 1 || d < 1 || w > 256 || h > 256 || d > 256) throw new CodeError("eBroken");
+  let q = 11;
+  if (q + 3 * k > b.length) throw new CodeError("eBroken");
+  const pal = [null];
+  for (let p = 1; p <= k; p++) { pal.push([b[q], b[q + 1], b[q + 2]]); q += 3; }
+  const total = w * h * d, idx = new Uint8Array(total);
+  let i = 0;
+  while (i < total) {
+    if (q >= b.length) throw new CodeError("eIncomplete");
+    const hb = b[q++];
+    if (hb < 128) {
+      const c = hb + 1;
+      if (q + c > b.length || i + c > total) throw new CodeError("eIncomplete");
+      for (let j = 0; j < c; j++) { if (b[q + j] > k) throw new CodeError("eBroken"); idx[i + j] = b[q + j]; }
+      q += c; i += c;
+    } else {
+      const c = hb - 125;
+      if (q >= b.length || i + c > total) throw new CodeError("eIncomplete");
+      const v = b[q++];
+      if (v > k) throw new CodeError("eBroken");
+      idx.fill(v, i, i + c); i += c;
+    }
+  }
+  return { w, h, d, pal, idx };
+}
+
+function encodeBlk(m) {
+  const n = m.w * m.h * m.d, o = [66, 75, 49, 1, m.w & 255, m.w >> 8, m.h & 255, m.h >> 8, m.d & 255, m.d >> 8, m.pal.length - 1];
+  for (let p = 1; p < m.pal.length; p++) o.push(m.pal[p][0], m.pal[p][1], m.pal[p][2]);
+  let i = 0;
+  while (i < n) {
+    const v = m.idx[i];
+    let run = 1;
+    while (i + run < n && run < 130 && m.idx[i + run] === v) run++;
+    if (run >= 3) { o.push(125 + run, v); i += run; continue; }
+    const start = o.length; o.push(0);
+    let len = 0;
+    while (i < n && len < 128) {
+      const a = m.idx[i];
+      if (len > 0 && i + 2 < n && m.idx[i + 1] === a && m.idx[i + 2] === a) break;
+      o.push(a); i++; len++;
+    }
+    o[start] = len - 1;
+  }
+  let bin = "";
+  for (let j = 0; j < o.length; j += 8192) bin += String.fromCharCode.apply(null, o.slice(j, j + 8192));
+  return "BLK1:" + btoa(bin);
+}
+
+const at = (m, x, y, z) => (x < 0 || y < 0 || z < 0 || x >= m.w || y >= m.h || z >= m.d) ? 0 : m.idx[x + m.w * (z + m.d * y)];
+
+// ---------------------------------------------------------------- faces
+// normal, then the 4 corners (offsets from the cube's min corner)
+const FACES = [
+  [[1, 0, 0], [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]]],
+  [[-1, 0, 0], [[0, 0, 1], [0, 1, 1], [0, 1, 0], [0, 0, 0]]],
+  [[0, 1, 0], [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]]],
+  [[0, -1, 0], [[0, 0, 1], [0, 0, 0], [1, 0, 0], [1, 0, 1]]],
+  [[0, 0, 1], [[1, 0, 1], [1, 1, 1], [0, 1, 1], [0, 0, 1]]],
+  [[0, 0, -1], [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]]],
+];
+const SHADE = [0.8, 0.8, 1.0, 0.62, 0.9, 0.9];
+
+function visibleFaces(m) {
+  const list = [];
+  for (let y = 0; y < m.h; y++) for (let z = 0; z < m.d; z++) for (let x = 0; x < m.w; x++) {
+    const p = m.idx[x + m.w * (z + m.d * y)];
+    if (!p) continue;
+    for (let f = 0; f < 6; f++) {
+      const n = FACES[f][0];
+      if (at(m, x + n[0], y + n[1], z + n[2])) continue;
+      list.push([x, y, z, f, p]);
+    }
+  }
+  return list;
+}
+
+// ---------------------------------------------------------------- zlib and PNG
+// CompressionStream("deflate") writes the zlib format FBX and PNG want; without it, stored (uncompressed) blocks
+async function zlib(bytes) {
+  if (typeof CompressionStream === "function") {
+    try {
+      const s = new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate"));
+      return new Uint8Array(await new Response(s).arrayBuffer());
+    } catch (e) { /* fall through */ }
+  }
+  return zlibStored(bytes);
+}
+function adler32(b) {
+  let a = 1, c = 0;
+  for (let i = 0; i < b.length;) {
+    const end = Math.min(b.length, i + 5552);
+    for (; i < end; i++) { a += b[i]; c += a; }
+    a %= 65521; c %= 65521;
+  }
+  return ((c << 16) | a) >>> 0;
+}
+function zlibStored(b) {
+  const n = b.length, blocks = Math.max(1, Math.ceil(n / 65535));
+  const o = new Uint8Array(2 + n + blocks * 5 + 4);
+  o[0] = 0x78; o[1] = 0x01;
+  let q = 2;
+  for (let k = 0; k < blocks; k++) {
+    const s = k * 65535, len = Math.min(65535, n - s);
+    o[q++] = k === blocks - 1 ? 1 : 0;
+    o[q++] = len & 255; o[q++] = len >> 8; o[q++] = ~len & 255; o[q++] = (~len >> 8) & 255;
+    o.set(b.subarray(s, s + len), q); q += len;
+  }
+  const a = adler32(b);
+  o[q++] = a >>> 24; o[q++] = (a >>> 16) & 255; o[q++] = (a >>> 8) & 255; o[q++] = a & 255;
+  return o;
+}
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+  return t;
+})();
+function crc32(b) { let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = CRC_TABLE[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
+async function makePng(w, h, rgb) {
+  const row = 1 + w * 3, raw = new Uint8Array(h * row);
+  for (let y = 0; y < h; y++) raw.set(rgb.subarray(y * w * 3, (y + 1) * w * 3), y * row + 1);   // filter 0 per row
+  const ihdr = new Uint8Array(13), dv = new DataView(ihdr.buffer);
+  dv.setUint32(0, w); dv.setUint32(4, h); ihdr[8] = 8; ihdr[9] = 2;   // 8-bit RGB
+  const parts = [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])];
+  for (const [type, data] of [["IHDR", ihdr], ["IDAT", await zlib(raw)], ["IEND", new Uint8Array(0)]]) {
+    const c = new Uint8Array(12 + data.length), cv = new DataView(c.buffer);
+    cv.setUint32(0, data.length);
+    for (let i = 0; i < 4; i++) c[4 + i] = type.charCodeAt(i);
+    c.set(data, 8);
+    cv.setUint32(8 + data.length, crc32(c.subarray(4, 8 + data.length)));
+    parts.push(c);
+  }
+  const out = new Uint8Array(parts.reduce((s, p) => s + p.length, 0));
+  let o = 0;
+  for (const p of parts) { out.set(p, o); o += p.length; }
+  return out;
+}
+
+// ---------------------------------------------------------------- block mesh for FBX
+// Only faces that touch an empty cell; with merge, touching faces of one colour on one plane become one rectangle.
+// File space: Y up, metres, board z mirrored, so the board's front (control panel side, z = 0) faces +Z: forward in
+// Unity (which flips x on import, giving the board turned 180 degrees, not a mirror image) and the front view in Blender.
+function buildBlockMesh(m, opt) {
+  const { w, h, d, idx } = m, dims = [w, h, d], s = opt.size, merge = opt.merge !== false;
+  const cell = (x, y, z) => (x < 0 || y < 0 || z < 0 || x >= w || y >= h || z >= d) ? 0 : idx[x + w * (z + d * y)];
+  const used = new Uint8Array(256);
+  let x0 = w, y0 = h, z0 = d, x1 = -1, y1 = -1, z1 = -1;
+  for (let y = 0; y < h; y++) for (let z = 0; z < d; z++) for (let x = 0; x < w; x++) {
+    const p = idx[x + w * (z + d * y)];
+    if (!p) continue;
+    used[p] = 1;
+    if (x < x0) x0 = x; if (x > x1) x1 = x;
+    if (y < y0) y0 = y; if (y > y1) y1 = y;
+    if (z < z0) z0 = z; if (z > z1) z1 = z;
+  }
+  if (x1 < 0) throw new CodeError("fbxEmpty");
+  // palette entries in use, in palette order; slot = position in that list
+  const slot = new Int32Array(256).fill(-1), colors = [];
+  for (let p = 1; p < m.pal.length; p++) if (used[p]) { slot[p] = colors.length; colors.push(m.pal[p]); }
+  const plate = opt.origin === "plate";
+  const ox = plate ? w / 2 : (x0 + x1 + 1) / 2, oy = plate ? 0 : y0, oz = plate ? d / 2 : (z0 + z1 + 1) / 2;
+  const vmap = new Map(), pos = [], poly = [], nrm = [], pv = [], pp = [];
+  const vert = c => {
+    const key = c[0] + 257 * (c[1] + 257 * c[2]);
+    let v = vmap.get(key);
+    if (v === undefined) { v = pos.length / 3; vmap.set(key, v); pos.push((c[0] - ox) * s, (c[1] - oy) * s, -(c[2] - oz) * s); }
+    return v;
+  };
+  const c = [0, 0, 0], q = [0, 0, 0];
+  for (let a = 0; a < 3; a++) {
+    const u = (a + 1) % 3, v = (a + 2) % 3, du = dims[u], dv = dims[v];
+    const mask = new Int32Array(du * dv);
+    for (const sg of [1, -1]) {
+      const n = [0, 0, 0];
+      n[a] = sg;
+      if (a === 2) n[2] = -sg;   // normal in file space
+      for (let i = 0; i < dims[a]; i++) {
+        let any = false;
+        for (let jv = 0; jv < dv; jv++) for (let ju = 0; ju < du; ju++) {
+          c[a] = i; c[u] = ju; c[v] = jv;
+          let p = cell(c[0], c[1], c[2]);
+          if (p) { c[a] = i + sg; if (cell(c[0], c[1], c[2])) p = 0; else any = true; }
+          mask[ju + du * jv] = p;
+        }
+        if (!any) continue;
+        q[a] = sg > 0 ? i + 1 : i;
+        for (let jv = 0; jv < dv; jv++) for (let ju = 0; ju < du;) {
+          const p = mask[ju + du * jv];
+          if (!p) { ju++; continue; }
+          let ww = 1, hh = 1;
+          if (merge) {
+            while (ju + ww < du && mask[ju + ww + du * jv] === p) ww++;
+            grow: while (jv + hh < dv) { for (let k = 0; k < ww; k++) if (mask[ju + k + du * (jv + hh)] !== p) break grow; hh++; }
+          }
+          for (let b = 0; b < hh; b++) mask.fill(0, ju + du * (jv + b), ju + ww + du * (jv + b));
+          // these corners go round +a in board space; the mirrored z flips that, so +a faces take the reverse order
+          const corners = [[ju, jv], [ju + ww, jv], [ju + ww, jv + hh], [ju, jv + hh]];
+          if (sg > 0) corners.reverse();
+          for (let k = 0; k < 4; k++) {
+            q[u] = corners[k][0]; q[v] = corners[k][1];
+            const vi = vert(q);
+            poly.push(k === 3 ? ~vi : vi);   // FBX ends each polygon with -(index + 1)
+            nrm.push(n[0], n[1], n[2]);
+            pv.push(slot[p]);
+          }
+          pp.push(slot[p]);
+          ju += ww;
+        }
+      }
+    }
+  }
+  return {
+    positions: new Float64Array(pos), poly: new Int32Array(poly), normals: new Float64Array(nrm),
+    cornerSlot: new Int32Array(pv), polySlot: new Int32Array(pp), colors, quads: pp.length, vertices: pos.length / 3,
+  };
+}
+
+// ---------------------------------------------------------------- FBX 7.4 binary writer
+const UTF8 = new TextEncoder();
+const fN = (n, p, c) => ({ n, p: p || [], c: c || [] });
+const fI = v => ({ t: "I", v }), fL = v => ({ t: "L", v }), fD = v => ({ t: "D", v }), fS = v => ({ t: "S", v }), fR = v => ({ t: "R", v }), fC = v => ({ t: "C", v });
+const fAI = v => ({ t: "i", v: v instanceof Int32Array ? v : new Int32Array(v) }), fAD = v => ({ t: "d", v: v instanceof Float64Array ? v : new Float64Array(v) });
+const f1 = (n, prop) => fN(n, [prop]);
+const fP = (name, type, label, flags, ...vals) => fN("P", [fS(name), fS(type), fS(label), fS(flags), ...vals]);
+const fP70 = (...ps) => fN("Properties70", [], ps);
+
+async function fbxProp(p) {
+  let b;
+  switch (p.t) {
+    case "C": b = new Uint8Array(2); b[1] = p.v ? 1 : 0; break;
+    case "I": b = new Uint8Array(5); new DataView(b.buffer).setInt32(1, p.v, true); break;
+    case "L": { b = new Uint8Array(9); const dv = new DataView(b.buffer); dv.setUint32(1, p.v % 4294967296, true); dv.setUint32(5, Math.floor(p.v / 4294967296), true); break; }
+    case "D": b = new Uint8Array(9); new DataView(b.buffer).setFloat64(1, p.v, true); break;
+    case "S": case "R": {
+      const s = typeof p.v === "string" ? UTF8.encode(p.v) : p.v;
+      b = new Uint8Array(5 + s.length); new DataView(b.buffer).setUint32(1, s.length, true); b.set(s, 5); break;
+    }
+    case "i": case "d": {
+      const raw = new Uint8Array(p.v.buffer, p.v.byteOffset, p.v.byteLength);
+      let data = raw, enc = 0;
+      if (raw.length >= 1024) { const z = await zlib(raw); if (z.length < raw.length) { data = z; enc = 1; } }
+      b = new Uint8Array(13 + data.length);
+      const dv = new DataView(b.buffer);
+      dv.setUint32(1, p.v.length, true); dv.setUint32(5, enc, true); dv.setUint32(9, data.length, true); b.set(data, 13);
+      break;
+    }
+    default: throw new Error("bad FBX property " + p.t);
+  }
+  b[0] = p.t.charCodeAt(0);
+  return b;
+}
+async function fbxPrepare(node) {
+  node.nb = UTF8.encode(node.n);
+  node.pb = [];
+  for (const p of node.p) node.pb.push(await fbxProp(p));
+  for (const ch of node.c) await fbxPrepare(ch);
+}
+// record: end offset u32, property count u32, property bytes u32, name; children end with a 13-byte null record
+// (also written after an empty record that is not the last in its list, as Blender and the FBX SDK do)
+function fbxMeasure(node, last) {
+  let s = 13 + node.nb.length;
+  for (const b of node.pb) s += b.length;
+  if (node.c.length) { node.c.forEach((ch, i) => { s += fbxMeasure(ch, i === node.c.length - 1); }); s += 13; }
+  else if (!node.p.length && !last) s += 13;
+  return node.size = s;
+}
+function fbxPut(u8, dv, o, node, last) {
+  const end = o + node.size;
+  let pl = 0;
+  for (const b of node.pb) pl += b.length;
+  dv.setUint32(o, end, true); dv.setUint32(o + 4, node.p.length, true); dv.setUint32(o + 8, pl, true);
+  u8[o + 12] = node.nb.length; u8.set(node.nb, o + 13);
+  o += 13 + node.nb.length;
+  for (const b of node.pb) { u8.set(b, o); o += b.length; }
+  if (node.c.length) { node.c.forEach((ch, i) => { o = fbxPut(u8, dv, o, ch, i === node.c.length - 1); }); o += 13; }
+  else if (!node.p.length && !last) o += 13;
+  if (o !== end) throw new Error("FBX size mismatch");
+  return o;
+}
+// FileId, CreationTime and the footer must agree for the FBX SDK (Unity); these are the values Blender writes
+const FBX_FILE_ID = [0x28, 0xb3, 0x2a, 0xeb, 0xb6, 0x24, 0xcc, 0xc2, 0xbf, 0xc8, 0xb0, 0x2a, 0xa9, 0x2b, 0xfc, 0xf1];
+const FBX_FOOT_ID = [0xfa, 0xbc, 0xab, 0x09, 0xd0, 0xc8, 0xd4, 0x66, 0xb1, 0x76, 0xfb, 0x83, 0x1c, 0xf7, 0x26, 0x7e];
+const FBX_FOOT_END = [0xf8, 0x5a, 0x8c, 0x6a, 0xde, 0xf5, 0xd9, 0x7e, 0xec, 0xe9, 0x0c, 0xe3, 0x75, 0x8f, 0x29, 0x0b];
+async function fbxWrite(top) {
+  for (const n of top) await fbxPrepare(n);
+  let body = 0;
+  top.forEach((n, i) => { body += fbxMeasure(n, i === top.length - 1); });
+  const foot = 27 + body + 13 + 16 + 4;
+  let pad = ((foot + 15) & ~15) - foot;
+  if (pad === 0) pad = 16;
+  const u8 = new Uint8Array(foot + pad + 4 + 120 + 16), dv = new DataView(u8.buffer);
+  const head = "Kaydara FBX Binary  \0\x1a\0";
+  for (let i = 0; i < head.length; i++) u8[i] = head.charCodeAt(i);
+  dv.setUint32(23, 7400, true);
+  let o = 27;
+  top.forEach((n, i) => { o = fbxPut(u8, dv, o, n, i === top.length - 1); });
+  o += 13;
+  u8.set(FBX_FOOT_ID, o);
+  o += 16 + 4 + pad;
+  dv.setUint32(o, 7400, true);
+  u8.set(FBX_FOOT_END, o + 4 + 120);
+  return u8;
+}
+
+// opt: size (metres per block), merge, origin ("blocks" | "plate"), mode ("texture" | "materials"),
+// name (file base name; the palette image and material are named after it so two exports never share a name in Unity)
+async function makeFbx(m, opt) {
+  const mesh = buildBlockMesh(m, opt), K = mesh.colors.length, tex = opt.mode !== "materials";
+  const palName = (opt.name || "BlockBuilder") + "_palette";
+  const lin = v => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  // each colour slot: the centre of its 4 x 4 block in a 64 x 64 palette image (16 per row), and a vertex colour
+  const uv = new Float64Array(K * 2), rgba = new Float64Array(K * 4);
+  for (let k = 0; k < K; k++) {
+    uv[2 * k] = ((k % 16) + 0.5) / 16; uv[2 * k + 1] = 1 - (Math.floor(k / 16) + 0.5) / 16;
+    const c = mesh.colors[k];
+    rgba[4 * k] = c[0] / 255; rgba[4 * k + 1] = c[1] / 255; rgba[4 * k + 2] = c[2] / 255; rgba[4 * k + 3] = 1;
+  }
+  const ID_MODEL = 1100000001, ID_GEOM = 1100000002, ID_TEX = 1100000003, ID_VIDEO = 1100000004, ID_DOC = 1100000005, ID_MAT = 1200000000;
+  const name = "Blocks";
+  const material = (id, nm, rgb) => fN("Material", [fL(id), fS(nm + "\0\x01Material"), fS("")], [
+    f1("Version", fI(102)), f1("ShadingModel", fS("Phong")), f1("MultiLayer", fI(0)),
+    fP70(
+      fP("EmissiveColor", "Color", "", "A", fD(0), fD(0), fD(0)),
+      fP("EmissiveFactor", "Number", "", "A", fD(1)),
+      fP("AmbientColor", "Color", "", "A", fD(0), fD(0), fD(0)),
+      fP("AmbientFactor", "Number", "", "A", fD(0)),
+      fP("DiffuseColor", "Color", "", "A", fD(rgb[0]), fD(rgb[1]), fD(rgb[2])),
+      fP("DiffuseFactor", "Number", "", "A", fD(1)),
+      fP("TransparencyFactor", "Number", "", "A", fD(0)),
+      fP("Opacity", "Number", "", "A", fD(1)),
+      fP("SpecularColor", "Color", "", "A", fD(1), fD(1), fD(1)),
+      fP("SpecularFactor", "Number", "", "A", fD(0.1)),
+      fP("Shininess", "Number", "", "A", fD(8)),
+      fP("ShininessExponent", "Number", "", "A", fD(8)),
+      fP("ReflectionFactor", "Number", "", "A", fD(0)),
+    ),
+  ]);
+  const mats = [], links = [];
+  if (tex) {
+    mats.push(material(ID_MAT, palName, [1, 1, 1]));
+  } else {
+    const hex = v => v.toString(16).padStart(2, "0");
+    mesh.colors.forEach((c, k) => mats.push(material(ID_MAT + k, "Block_" + String(k + 1).padStart(2, "0") + "_" + hex(c[0]) + hex(c[1]) + hex(c[2]), [lin(c[0]), lin(c[1]), lin(c[2])])));
+  }
+  const objects = [
+    fN("Geometry", [fL(ID_GEOM), fS(name + "\0\x01Geometry"), fS("Mesh")], [
+      fP70(),
+      f1("GeometryVersion", fI(124)),
+      f1("Vertices", fAD(mesh.positions)),
+      f1("PolygonVertexIndex", fAI(mesh.poly)),
+      fN("LayerElementNormal", [fI(0)], [f1("Version", fI(101)), f1("Name", fS("")), f1("MappingInformationType", fS("ByPolygonVertex")), f1("ReferenceInformationType", fS("Direct")), f1("Normals", fAD(mesh.normals))]),
+      fN("LayerElementSmoothing", [fI(0)], [f1("Version", fI(102)), f1("Name", fS("")), f1("MappingInformationType", fS("ByPolygon")), f1("ReferenceInformationType", fS("Direct")), f1("Smoothing", fAI(new Int32Array(mesh.quads)))]),
+      fN("LayerElementColor", [fI(0)], [f1("Version", fI(101)), f1("Name", fS("Col")), f1("MappingInformationType", fS("ByPolygonVertex")), f1("ReferenceInformationType", fS("IndexToDirect")), f1("Colors", fAD(rgba)), f1("ColorIndex", fAI(mesh.cornerSlot))]),
+      fN("LayerElementUV", [fI(0)], [f1("Version", fI(101)), f1("Name", fS("UVMap")), f1("MappingInformationType", fS("ByPolygonVertex")), f1("ReferenceInformationType", fS("IndexToDirect")), f1("UV", fAD(uv)), f1("UVIndex", fAI(mesh.cornerSlot))]),
+      fN("LayerElementMaterial", [fI(0)], [f1("Version", fI(101)), f1("Name", fS("")), f1("MappingInformationType", fS(tex ? "AllSame" : "ByPolygon")), f1("ReferenceInformationType", fS("IndexToDirect")), f1("Materials", fAI(tex ? new Int32Array(1) : mesh.polySlot))]),
+      fN("Layer", [fI(0)], [f1("Version", fI(100)), ...["LayerElementNormal", "LayerElementSmoothing", "LayerElementColor", "LayerElementUV", "LayerElementMaterial"].map(t => fN("LayerElement", [], [f1("Type", fS(t)), f1("TypedIndex", fI(0))]))]),
+    ]),
+    fN("Model", [fL(ID_MODEL), fS(name + "\0\x01Model"), fS("Mesh")], [
+      f1("Version", fI(232)),
+      fP70(
+        fP("Lcl Translation", "Lcl Translation", "", "A", fD(0), fD(0), fD(0)),
+        fP("Lcl Rotation", "Lcl Rotation", "", "A", fD(0), fD(0), fD(0)),
+        fP("Lcl Scaling", "Lcl Scaling", "", "A", fD(1), fD(1), fD(1)),
+        fP("DefaultAttributeIndex", "int", "Integer", "", fI(0)),
+        fP("InheritType", "enum", "", "", fI(1)),
+      ),
+      f1("MultiLayer", fI(0)), f1("MultiTake", fI(0)), f1("Shading", fC(true)), f1("Culling", fS("CullingOff")),
+    ]),
+    ...mats,
+  ];
+  links.push(["OO", ID_MODEL, 0], ["OO", ID_GEOM, ID_MODEL]);
+  mats.forEach((mt, k) => links.push(["OO", ID_MAT + k, ID_MODEL]));
+  if (tex) {
+    const img = new Uint8Array(64 * 64 * 3).fill(128);
+    mesh.colors.forEach((c, k) => {
+      const bx = (k % 16) * 4, by = Math.floor(k / 16) * 4;
+      for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) img.set(c, ((by + y) * 64 + bx + x) * 3);
+    });
+    const png = await makePng(64, 64, img), file = palName + ".png";
+    objects.push(
+      fN("Video", [fL(ID_VIDEO), fS(palName + "\0\x01Video"), fS("Clip")], [
+        f1("Type", fS("Clip")),
+        fP70(fP("Path", "KString", "XRefUrl", "", fS(file)), fP("RelPath", "KString", "XRefUrl", "", fS(file))),
+        f1("UseMipMap", fI(0)), f1("Filename", fS(file)), f1("RelativeFilename", fS(file)), f1("Content", fR(png)),
+      ]),
+      fN("Texture", [fL(ID_TEX), fS(palName + "\0\x01Texture"), fS("")], [
+        f1("Type", fS("TextureVideoClip")), f1("Version", fI(202)), f1("TextureName", fS(palName + "\0\x01Texture")),
+        fP70(fP("CurrentTextureBlendMode", "enum", "", "", fI(0)), fP("UVSet", "KString", "", "", fS("UVMap")), fP("UseMaterial", "bool", "", "", fI(1))),
+        f1("Media", fS(palName + "\0\x01Video")), f1("FileName", fS(file)), f1("RelativeFilename", fS(file)),
+        fN("ModelUVTranslation", [fD(0), fD(0)]), fN("ModelUVScaling", [fD(1), fD(1)]),
+        f1("Texture_Alpha_Source", fS("None")), fN("Cropping", [fI(0), fI(0), fI(0), fI(0)]),
+      ]),
+    );
+    links.push(["OP", ID_TEX, ID_MAT, "DiffuseColor"], ["OO", ID_VIDEO, ID_TEX]);
+  }
+  const now = new Date();
+  // the FBX SDK (Unity) takes each object's class from its template: without "FbxFileTexture" the palette is dropped
+  const def = (t, n, cls, ...props) => fN("ObjectType", [fS(t)], [f1("Count", fI(n)), ...(cls ? [fN("PropertyTemplate", [fS(cls)], [fP70(...props)])] : [])]);
+  const defs = [
+    def("GlobalSettings", 1),
+    def("Model", 1, "FbxNode",
+      fP("Lcl Translation", "Lcl Translation", "", "A", fD(0), fD(0), fD(0)), fP("Lcl Rotation", "Lcl Rotation", "", "A", fD(0), fD(0), fD(0)),
+      fP("Lcl Scaling", "Lcl Scaling", "", "A", fD(1), fD(1), fD(1)), fP("Visibility", "Visibility", "", "A", fD(1))),
+    def("Geometry", 1, "FbxMesh",
+      fP("Primary Visibility", "bool", "", "", fI(1)), fP("Casts Shadows", "bool", "", "", fI(1)), fP("Receive Shadows", "bool", "", "", fI(1))),
+    def("Material", mats.length, "FbxSurfacePhong",
+      fP("ShadingModel", "KString", "", "", fS("Phong")), fP("DiffuseColor", "Color", "", "A", fD(0.8), fD(0.8), fD(0.8)), fP("Opacity", "Number", "", "A", fD(1))),
+  ];
+  if (tex) defs.push(
+    def("Texture", 1, "FbxFileTexture", fP("UVSet", "KString", "", "", fS("default")), fP("UseMaterial", "bool", "", "", fI(0)), fP("UseMipMap", "bool", "", "", fI(0))),
+    def("Video", 1, "FbxVideo", fP("Path", "KString", "Url", "", fS(""))),
+  );
+  const top = [
+    fN("FBXHeaderExtension", [], [
+      f1("FBXHeaderVersion", fI(1003)), f1("FBXVersion", fI(7400)), f1("EncryptionType", fI(0)),
+      fN("CreationTimeStamp", [], [f1("Version", fI(1000)), f1("Year", fI(now.getFullYear())), f1("Month", fI(now.getMonth() + 1)), f1("Day", fI(now.getDate())),
+        f1("Hour", fI(now.getHours())), f1("Minute", fI(now.getMinutes())), f1("Second", fI(now.getSeconds())), f1("Millisecond", fI(now.getMilliseconds()))]),
+      f1("Creator", fS("BlockBuilder Code Tool")),
+      fN("SceneInfo", [fS("GlobalInfo\0\x01SceneInfo"), fS("UserData")], [
+        f1("Type", fS("UserData")), f1("Version", fI(100)),
+        fN("MetaData", [], ["Version", "Title", "Subject", "Author", "Keywords", "Revision", "Comment"].map(k => k === "Version" ? f1(k, fI(100)) : f1(k, fS("")))),
+        fP70(fP("Original|ApplicationVendor", "KString", "", "", fS("BlockBuilder")), fP("Original|ApplicationName", "KString", "", "", fS("BlockBuilder Code Tool")), fP("Original|ApplicationVersion", "KString", "", "", fS("1.0"))),
+      ]),
+    ]),
+    f1("FileId", fR(new Uint8Array(FBX_FILE_ID))),
+    f1("CreationTime", fS("1970-01-01 10:00:00:000")),
+    f1("Creator", fS("BlockBuilder Code Tool")),
+    fN("GlobalSettings", [], [
+      f1("Version", fI(1000)),
+      fP70(
+        fP("UpAxis", "int", "Integer", "", fI(1)), fP("UpAxisSign", "int", "Integer", "", fI(1)),
+        fP("FrontAxis", "int", "Integer", "", fI(2)), fP("FrontAxisSign", "int", "Integer", "", fI(1)),
+        fP("CoordAxis", "int", "Integer", "", fI(0)), fP("CoordAxisSign", "int", "Integer", "", fI(1)),
+        fP("OriginalUpAxis", "int", "Integer", "", fI(1)), fP("OriginalUpAxisSign", "int", "Integer", "", fI(1)),
+        fP("UnitScaleFactor", "double", "Number", "", fD(100)), fP("OriginalUnitScaleFactor", "double", "Number", "", fD(100)),
+        fP("AmbientColor", "ColorRGB", "Color", "", fD(0), fD(0), fD(0)),
+        fP("DefaultCamera", "KString", "", "", fS("Producer Perspective")),
+        fP("TimeMode", "enum", "", "", fI(11)),
+        fP("TimeSpanStart", "KTime", "Time", "", fL(0)), fP("TimeSpanStop", "KTime", "Time", "", fL(46186158000)),
+        fP("CustomFrameRate", "double", "Number", "", fD(24)),
+      ),
+    ]),
+    fN("Documents", [], [
+      f1("Count", fI(1)),
+      fN("Document", [fL(ID_DOC), fS("Scene"), fS("Scene")], [fP70(fP("SourceObject", "object", "", ""), fP("ActiveAnimStackName", "KString", "", "", fS(""))), f1("RootNode", fL(0))]),
+    ]),
+    fN("References"),
+    fN("Definitions", [], [f1("Version", fI(100)), f1("Count", fI(defs.reduce((s, dn) => s + dn.c[0].p[0].v, 0))), ...defs]),
+    fN("Objects", [], objects),
+    fN("Connections", [], links.map(l => fN("C", [fS(l[0]), fL(l[1]), fL(l[2]), ...(l[3] ? [fS(l[3])] : [])]))),
+    fN("Takes", [], [f1("Current", fS(""))]),
+  ];
+  return { bytes: await fbxWrite(top), quads: mesh.quads, vertices: mesh.vertices, materials: mats.length, colors: K };
+}
+// ================================================================ end of core
+
+// ---------------------------------------------------------------- text
+const STR = {
+  zh: {
+    title: "积木代码工具",
+    intro: "在积木搭建板上按“导出代码”，把 <b>BLK1:</b> 开头的整串文字复制过来，粘贴到下面，就能看 3D 预览、下载图片，或者存成 FBX、OBJ、MagicaVoxel（.vox）文件。也可以反过来，把 .vox 文件变成积木代码，贴回 VRChat 里导入。全部在你自己的浏览器里完成，不联网。",
+    go: "预览", png: "下载图片", dlVox: "下载 .vox", dlObj: "下载 .obj", image: "图片", bg: "背景", clear: "透明", light: "浅色", dark: "深色",
+    front: "正面", right: "右侧", back: "背面", left: "左侧", top: "俯视", iso: "斜 45°", zoom: "缩放", plate: "底板",
+    dragHint: "拖动画面旋转，滚轮缩放。“正面”就是积木台控制面板那一侧。",
+    info: "宽 {w} × 深 {d} × 高 {h}，{n} 块，{k} 种颜色",
+    fbxTitle: "存成 FBX（Unity、Blender 等）",
+    fbxHint: "先在上面粘贴代码并按“预览”。文件里只留看得见的面，相邻的同色面合并成一块，面数很少。",
+    cube: "一块的大小", c15: "15 cm（默认设置下展开后的大小）", c25: "2.5 cm（默认设置下桌上的大小）", c10: "10 cm", c100: "1 m", cCustom: "自定义",
+    color: "颜色", mTex: "一张调色板贴图（1 个材质，适合 VRChat / Unity）", mMat: "每种颜色一个材质（方便在 Blender 里改色）",
+    origin: "原点", oBlocks: "方块的底部中心", oPlate: "积木台的底面中心（保留四周的空位）",
+    merge: "合并同色的面", fbx: "下载 .fbx",
+    fbxNote: "顶点色也写在文件里。正面（控制面板那一侧）朝 Unity 的 +Z、Blender 的正视图。<br>Unity：把 .fbx 放进 Assets 并选中，在 Inspector 的 Materials 页签按“Extract Textures...”，选同一个文件夹，颜色就出来了（Unity 不会自己用 FBX 里自带的贴图）。想让颜色完全准确，把取出来的贴图的 Compression 改成 None。选“每种颜色一个材质”时不需要这一步。<br>Blender：文件 → 导入 → FBX (.fbx)，直接带颜色。",
+    fbxBusy: "正在生成 FBX…",
+    fbxDone: "FBX：{q} 个面（{t} 个三角形），{v} 个顶点，{mats} 个材质，{size}",
+    fbxEmpty: "积木台上一块都没有", fbxBadSize: "大小请填 0.1 到 10000 之间的厘米数",
+    voxTitle: ".vox 文件 → 积木代码",
+    voxHint: "选一个 MagicaVoxel 的 .vox 文件（只读第一个模型）。宽、深、高都不能超过 100（世界作者把 Max Side 调小时以世界里的为准）。转换出来的代码复制后，粘贴到积木搭建板的文本框，按“导入代码”。",
+    voxOut: "转换结果会出现在这里", copy: "复制代码", voxPreview: "在上面预览",
+    copied: "已复制，可以粘贴到积木搭建板的文本框了", copiedShort: "已复制",
+    voxInfo: "宽 {w} × 深 {d} × 高 {h}，{n} 块，{k} 种颜色，代码 {len} 字", voxMulti: "。文件里有 {m} 个模型，只转换了第一个",
+    eInvalid: "这不是有效的积木代码", eBroken: "代码损坏", eIncomplete: "代码不完整（可能没复制全）",
+    eNotVox: "这不是 MagicaVoxel 的 .vox 文件", eNoModel: "文件里没有找到模型", eTooBig: "模型是 {w} × {d} × {h}，超过了最大 100",
+  },
+  ja: {
+    title: "BlockBuilder コードツール",
+    intro: "積み木台の「コード出力」で表示される <b>BLK1:</b> から始まる文字列をすべてコピーして、下に貼り付けてください。3D で確認したり、画像や FBX・OBJ・MagicaVoxel（.vox）ファイルとして保存したりできます。逆に .vox ファイルをブロックのコードに変換して、VRChat で読み込むこともできます。すべてお使いのブラウザの中で動き、通信はしません。",
+    go: "表示", png: "画像を保存", dlVox: ".vox を保存", dlObj: ".obj を保存", image: "画像", bg: "背景", clear: "透明", light: "明るい", dark: "暗い",
+    front: "正面", right: "右", back: "背面", left: "左", top: "上", iso: "斜め 45°", zoom: "ズーム", plate: "土台",
+    dragHint: "ドラッグで回転、ホイールでズーム。「正面」は積み木台の操作パネルがある側です。",
+    info: "幅 {w} × 奥行き {d} × 高さ {h}、{n} 個、{k} 色",
+    fbxTitle: "FBX で保存（Unity・Blender など）",
+    fbxHint: "先に上でコードを貼り付けて「表示」を押してください。見える面だけを残し、となり合う同じ色の面は 1 枚にまとめるので、ポリゴン数が少なくなります。",
+    cube: "ブロック 1 個の大きさ", c15: "15 cm（初期設定で広げたときの大きさ）", c25: "2.5 cm（初期設定で机の上の大きさ）", c10: "10 cm", c100: "1 m", cCustom: "指定する",
+    color: "色", mTex: "パレット画像 1 枚（マテリアル 1 つ。VRChat・Unity 向け）", mMat: "色ごとにマテリアル（Blender で色を変えやすい）",
+    origin: "原点", oBlocks: "ブロックの底の中心", oPlate: "積み木台の底の中心（まわりの空きも残す）",
+    merge: "同じ色の面をまとめる", fbx: ".fbx を保存",
+    fbxNote: "頂点カラーも書き込まれます。正面（操作パネル側）は Unity の +Z、Blender の正面ビューを向きます。<br>Unity：.fbx を Assets に入れて選択し、Inspector の Materials タブで「Extract Textures...」を押して同じフォルダを選ぶと色が付きます（Unity は FBX に埋め込まれたテクスチャを自動では使いません）。色を正確にしたいときは、取り出したテクスチャの Compression を None にしてください。「色ごとにマテリアル」を選んだ場合はこの手順は要りません。<br>Blender：ファイル → インポート → FBX (.fbx)。そのまま色が付きます。",
+    fbxBusy: "FBX を作成中…",
+    fbxDone: "FBX：{q} 面（三角形 {t}）、頂点 {v}、マテリアル {mats}、{size}",
+    fbxEmpty: "ブロックがひとつもありません", fbxBadSize: "大きさは 0.1〜10000 cm で入力してください",
+    voxTitle: ".vox ファイル → ブロックのコード",
+    voxHint: "MagicaVoxel の .vox ファイルを選んでください（最初のモデルだけを読みます）。幅・奥行き・高さはそれぞれ 100 まで（ワールド作者が Max Side を小さくしている場合はそちらが上限です）。変換したコードをコピーして積み木台の入力欄に貼り付け、「コード入力」を押してください。",
+    voxOut: "ここに変換結果が表示されます", copy: "コードをコピー", voxPreview: "上で表示",
+    copied: "コピーしました。積み木台の入力欄に貼り付けられます", copiedShort: "コピーしました",
+    voxInfo: "幅 {w} × 奥行き {d} × 高さ {h}、{n} 個、{k} 色、コード {len} 文字", voxMulti: "。ファイルには {m} 個のモデルがあり、最初の 1 つだけを変換しました",
+    eInvalid: "有効なブロックのコードではありません", eBroken: "コードが壊れています", eIncomplete: "コードが途中で切れています（すべてコピーできていないかもしれません）",
+    eNotVox: "MagicaVoxel の .vox ファイルではありません", eNoModel: "ファイルにモデルが見つかりません", eTooBig: "モデルが {w} × {d} × {h} で、上限の 100 を超えています",
+  },
+  en: {
+    title: "BlockBuilder Code Tool",
+    intro: "On the block board press “Export code”, copy the whole text starting with <b>BLK1:</b> and paste it below. You can look at it in 3D, save a picture, or save it as an FBX, OBJ or MagicaVoxel (.vox) file. You can also turn a .vox file into a block code and import it in VRChat. Everything runs in your own browser; nothing is uploaded.",
+    go: "Show", png: "Save picture", dlVox: "Save .vox", dlObj: "Save .obj", image: "Picture", bg: "Background", clear: "Transparent", light: "Light", dark: "Dark",
+    front: "Front", right: "Right", back: "Back", left: "Left", top: "Top", iso: "45°", zoom: "Zoom", plate: "Plate",
+    dragHint: "Drag to rotate, scroll to zoom. “Front” is the side with the board's control panel.",
+    info: "{w} wide × {d} deep × {h} high, {n} blocks, {k} colors",
+    fbxTitle: "Save as FBX (Unity, Blender, …)",
+    fbxHint: "Paste a code above and press “Show” first. Only visible faces are kept, and touching faces of the same color are merged, so the polygon count stays low.",
+    cube: "Block size", c15: "15 cm (opened size with default settings)", c25: "2.5 cm (desk size with default settings)", c10: "10 cm", c100: "1 m", cCustom: "Custom",
+    color: "Colors", mTex: "One palette texture (1 material, for VRChat / Unity)", mMat: "One material per color (easy to recolor in Blender)",
+    origin: "Origin", oBlocks: "Bottom center of the blocks", oPlate: "Bottom center of the board (keeps the empty space)",
+    merge: "Merge faces of the same color", fbx: "Save .fbx",
+    fbxNote: "Vertex colors are included too. The front (control panel side) faces Unity's +Z and Blender's front view.<br>Unity: put the .fbx in Assets, select it, press “Extract Textures...” in the Inspector's Materials tab and pick the same folder; the colors then appear (Unity does not use textures embedded in an FBX by itself). For exact colors, set the extracted texture's Compression to None. With “One material per color” this step is not needed.<br>Blender: File → Import → FBX (.fbx); the colors come in directly.",
+    fbxBusy: "Making the FBX…",
+    fbxDone: "FBX: {q} faces ({t} triangles), {v} vertices, {mats} material(s), {size}",
+    fbxEmpty: "There are no blocks", fbxBadSize: "Enter a size from 0.1 to 10000 cm",
+    voxTitle: ".vox file → block code",
+    voxHint: "Pick a MagicaVoxel .vox file (only the first model is read). Width, depth and height must each be 100 or less (or the world's Max Side if its author set it lower). Copy the code, paste it into the board's text field and press “Import code”.",
+    voxOut: "The code appears here", copy: "Copy code", voxPreview: "Show above",
+    copied: "Copied. Paste it into the board's text field", copiedShort: "Copied",
+    voxInfo: "{w} wide × {d} deep × {h} high, {n} blocks, {k} colors, code {len} characters", voxMulti: ". The file has {m} models; only the first was converted",
+    eInvalid: "This is not a valid block code", eBroken: "The code is damaged", eIncomplete: "The code is incomplete (maybe not all of it was copied)",
+    eNotVox: "This is not a MagicaVoxel .vox file", eNoModel: "No model found in the file", eTooBig: "The model is {w} × {d} × {h}, larger than the maximum of 100",
+  },
+};
+const $ = id => document.getElementById(id);
+let lang = "en";
+try { lang = localStorage.getItem("bbCodeToolLang") || ""; } catch (e) { lang = ""; }
+if (!STR[lang]) { const nav = (navigator.language || "").toLowerCase(); lang = nav.startsWith("zh") ? "zh" : nav.startsWith("ja") ? "ja" : "en"; }
+const fmtNum = n => n.toLocaleString(lang === "zh" ? "zh-CN" : lang === "ja" ? "ja-JP" : "en-US");
+function T(key, args) {
+  let s = STR[lang][key] || STR.en[key] || key;
+  if (args) s = s.replace(/\{(\w+)\}/g, (_, k) => typeof args[k] === "number" ? fmtNum(args[k]) : args[k] !== undefined ? args[k] : "");
+  return s;
+}
+// messages keep their key so a language switch rewrites them
+function setMsg(id, parts, err) {
+  const el = $(id);
+  el.msgParts = parts; el.msgErr = !!err;
+  el.className = err ? "msg err" : "msg";
+  el.textContent = parts ? parts.map(p => typeof p === "string" ? p : T(p[0], p[1])).join("") : "";
+}
+function errParts(e) { return e instanceof CodeError ? [[e.key, e.args]] : [String(e && e.message || e)]; }
+function applyLang() {
+  document.documentElement.lang = lang === "zh" ? "zh-CN" : lang;
+  document.title = T("title");
+  document.querySelectorAll("[data-t]").forEach(e => { e.textContent = T(e.dataset.t); });
+  document.querySelectorAll("[data-th]").forEach(e => { e.innerHTML = T(e.dataset.th); });   // fixed strings from STR only
+  $("voxOut").placeholder = T("voxOut");
+  document.querySelectorAll("[data-lang]").forEach(b => b.classList.toggle("on", b.dataset.lang === lang));
+  for (const id of ["msg", "fbxMsg", "voxMsg"]) if ($(id).msgParts) setMsg(id, $(id).msgParts, $(id).msgErr);
+}
+document.querySelectorAll("[data-lang]").forEach(b => b.onclick = () => {
+  lang = b.dataset.lang;
+  try { localStorage.setItem("bbCodeToolLang", lang); } catch (e) { /* private window */ }
+  applyLang();
+});
+
+// ---------------------------------------------------------------- 3D preview (orthographic, painter's algorithm)
+const view = $("view");
+let model = null, faces = [], yaw = -35, pitch = 28, zoom = 1, showGrid = true;
+
+function render(canvas, bg) {
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  if (bg) { ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H); }
+  if (!model) return;
+  const m = model;
+  const cy = Math.cos(yaw * Math.PI / 180), sy = Math.sin(yaw * Math.PI / 180);
+  const cp = Math.cos(pitch * Math.PI / 180), sp = Math.sin(pitch * Math.PI / 180);
+  const cx0 = m.w / 2, cy0 = m.h / 2, cz0 = m.d / 2;
+  // camera looks from the front (-z) rotated by yaw around y, tilted down by pitch
+  const proj = (x, y, z) => {
+    x -= cx0; y -= cy0; z -= cz0;
+    const rx = x * cy - z * sy, rz = x * sy + z * cy;
+    const ux = rx, uy = y * cp + rz * sp, depth = rz * cp - y * sp;   // depth grows away from the camera
+    return [ux, uy, depth];
+  };
+  const size = Math.sqrt(m.w * m.w + m.h * m.h + m.d * m.d);
+  const scale = Math.min(W, H) / size * 0.92 * zoom;
+  const sx = v => W / 2 + v[0] * scale, syy = v => H / 2 - v[1] * scale;
+  const viewDir = [-sy * cp, sp, -cy * cp];   // direction towards the camera, in model space
+  const plate = () => {
+    const corners = [[0, 0, 0], [m.w, 0, 0], [m.w, 0, m.d], [0, 0, m.d]].map(c => proj(c[0], -0.02, c[2]));
+    ctx.beginPath();
+    corners.forEach((c, i) => i ? ctx.lineTo(sx(c), syy(c)) : ctx.moveTo(sx(c), syy(c)));
+    ctx.closePath();
+    ctx.fillStyle = "rgba(243,240,248,0.95)"; ctx.fill();
+    ctx.strokeStyle = "rgba(201,192,221,0.9)"; ctx.lineWidth = Math.max(0.5, scale * 0.03);
+    ctx.beginPath();
+    for (let x = 0; x <= m.w; x++) { const a = proj(x, -0.02, 0), b = proj(x, -0.02, m.d); ctx.moveTo(sx(a), syy(a)); ctx.lineTo(sx(b), syy(b)); }
+    for (let z = 0; z <= m.d; z++) { const a = proj(0, -0.02, z), b = proj(m.w, -0.02, z); ctx.moveTo(sx(a), syy(a)); ctx.lineTo(sx(b), syy(b)); }
+    ctx.stroke();
+    ctx.strokeStyle = "#8e6ccf"; ctx.lineWidth = Math.max(1, scale * 0.06);
+    ctx.beginPath(); corners.forEach((c, i) => i ? ctx.lineTo(sx(c), syy(c)) : ctx.moveTo(sx(c), syy(c))); ctx.closePath(); ctx.stroke();
+  };
+  if (showGrid && pitch >= 0) plate();
+  // faces towards the camera, far to near
+  const light = [0.35, 0.85, -0.4];
+  const ll = Math.hypot(light[0], light[1], light[2]);
+  const draw = [];
+  for (const fc of faces) {
+    const n = FACES[fc[3]][0];
+    if (n[0] * viewDir[0] + n[1] * viewDir[1] + n[2] * viewDir[2] <= 1e-6) continue;
+    const c = proj(fc[0] + 0.5 + n[0] * 0.5, fc[1] + 0.5 + n[1] * 0.5, fc[2] + 0.5 + n[2] * 0.5);
+    draw.push([c[2], fc]);
+  }
+  draw.sort((a, b) => b[0] - a[0]);
+  ctx.lineJoin = "round";
+  const edge = Math.max(0.6, scale * 0.045);
+  for (const [, fc] of draw) {
+    const [x, y, z, f, p] = fc;
+    const n = FACES[f][0], cs = FACES[f][1];
+    const lit = 0.55 + 0.45 * Math.max(0, (n[0] * light[0] + n[1] * light[1] + n[2] * light[2]) / ll);
+    const k = SHADE[f] * 0.5 + lit * 0.55;
+    const col = m.pal[p];
+    ctx.beginPath();
+    cs.forEach((o, i) => { const v = proj(x + o[0], y + o[1], z + o[2]); i ? ctx.lineTo(sx(v), syy(v)) : ctx.moveTo(sx(v), syy(v)); });
+    ctx.closePath();
+    ctx.fillStyle = "rgb(" + Math.min(255, col[0] * k | 0) + "," + Math.min(255, col[1] * k | 0) + "," + Math.min(255, col[2] * k | 0) + ")";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0," + (scale > 6 ? 0.22 : 0.08) + ")";
+    ctx.lineWidth = edge;
+    ctx.stroke();
+  }
+  if (showGrid && pitch < 0) plate();   // seen from below, the plate covers the cubes
+}
+
+function show() { render(view, null); }
+
+let dragging = false, lastX = 0, lastY = 0;
+view.addEventListener("pointerdown", e => { dragging = true; lastX = e.clientX; lastY = e.clientY; view.setPointerCapture(e.pointerId); });
+view.addEventListener("pointermove", e => {
+  if (!dragging) return;
+  yaw -= (e.clientX - lastX) * 0.5; pitch = Math.max(-89, Math.min(89, pitch + (e.clientY - lastY) * 0.4));
+  lastX = e.clientX; lastY = e.clientY; show();
+});
+view.addEventListener("pointerup", () => { dragging = false; });
+view.addEventListener("wheel", e => { e.preventDefault(); zoom = Math.max(0.4, Math.min(3, zoom * (e.deltaY < 0 ? 1.1 : 0.9))); $("zoom").value = zoom; show(); }, { passive: false });
+
+$("zoom").oninput = e => { zoom = +e.target.value; show(); };
+$("grid").onchange = e => { showGrid = e.target.checked; show(); };
+document.querySelectorAll("[data-view]").forEach(b => b.onclick = () => {
+  const v = b.dataset.view;
+  const presets = { front: [0, 12], right: [-90, 12], back: [180, 12], left: [90, 12], top: [0, 89], iso: [-35, 28] };
+  [yaw, pitch] = presets[v]; show();
+});
+
+const EXPORTS = ["png", "vox", "obj", "fbx"];
+function setModel(m, prefix) {
+  model = m;
+  faces = visibleFaces(m);
+  let count = 0;
+  for (let i = 0; i < m.idx.length; i++) if (m.idx[i]) count++;
+  for (const id of EXPORTS) $(id).disabled = false;
+  setMsg("msg", [prefix || "", ["info", { w: m.w, d: m.d, h: m.h, n: count, k: m.pal.length - 1 }]]);
+  setMsg("fbxMsg", null);
+  show();
+}
+
+$("go").onclick = () => {
+  try { setModel(decodeBlk($("code").value), ""); }
+  catch (e) { model = null; show(); for (const id of EXPORTS) $(id).disabled = true; setMsg("msg", errParts(e), true); setMsg("fbxMsg", null); }
+};
+
+function stamp() { return new Date().toISOString().slice(0, 19).replace(/[-:T]/g, ""); }
+function download(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+}
+function baseName() { return "BlockBuilder_" + model.w + "x" + model.d + "x" + model.h + "_" + stamp(); }
+
+$("png").onclick = () => {
+  const size = +$("pngSize").value, bgSel = $("pngBg").value;
+  const c = document.createElement("canvas");
+  c.width = size; c.height = Math.round(size * view.height / view.width);
+  render(c, bgSel === "light" ? "#e9e6f1" : bgSel === "dark" ? "#24252b" : null);
+  c.toBlob(b => download(b, baseName() + ".png"), "image/png");
+};
+
+// ---------------------------------------------------------------- MagicaVoxel .vox (z up: vox x = x, vox y = z, vox z = y)
+$("vox").onclick = () => {
+  const m = model, vox = [];
+  for (let y = 0; y < m.h; y++) for (let z = 0; z < m.d; z++) for (let x = 0; x < m.w; x++) {
+    const p = m.idx[x + m.w * (z + m.d * y)];
+    if (p) vox.push(x, z, y, p);
+  }
+  const n = vox.length / 4;
+  const sizeLen = 12, xyziLen = 4 + vox.length, rgbaLen = 1024;
+  const children = (12 + sizeLen) + (12 + xyziLen) + (12 + rgbaLen);
+  const buf = new ArrayBuffer(8 + 12 + children), dv = new DataView(buf), u8 = new Uint8Array(buf);
+  let o = 0;
+  const tag = s => { for (let i = 0; i < 4; i++) u8[o++] = s.charCodeAt(i); };
+  const i32 = v => { dv.setInt32(o, v, true); o += 4; };
+  tag("VOX "); i32(150);
+  tag("MAIN"); i32(0); i32(children);
+  tag("SIZE"); i32(sizeLen); i32(0); i32(m.w); i32(m.d); i32(m.h);
+  tag("XYZI"); i32(xyziLen); i32(0); i32(n);
+  for (let i = 0; i < vox.length; i++) u8[o++] = vox[i];
+  tag("RGBA"); i32(rgbaLen); i32(0);
+  for (let i = 0; i < 256; i++) {
+    const c = m.pal[i + 1];   // colour index c uses palette entry c - 1
+    u8[o++] = c ? c[0] : 0; u8[o++] = c ? c[1] : 0; u8[o++] = c ? c[2] : 0; u8[o++] = c ? 255 : 0;
+  }
+  download(new Blob([buf], { type: "application/octet-stream" }), baseName() + ".vox");
+};
+
+// OBJ with vertex colours (Blender reads "v x y z r g b"); 1 unit = 1 cube, y up
+$("obj").onclick = () => {
+  const lines = ["# block builder export: " + model.w + " x " + model.d + " x " + model.h, "o blocks"];
+  let v = 1;
+  for (const [x, y, z, f, p] of faces) {
+    const c = model.pal[p], cs = FACES[f][1];
+    const col = " " + (c[0] / 255).toFixed(4) + " " + (c[1] / 255).toFixed(4) + " " + (c[2] / 255).toFixed(4);
+    for (const q of cs) lines.push("v " + (x + q[0]) + " " + (y + q[1]) + " " + (-(z + q[2])) + col);
+    lines.push("f " + (v + 3) + " " + (v + 2) + " " + (v + 1) + " " + v);   // z is mirrored for right-handed tools, so the winding flips
+    v += 4;
+  }
+  download(new Blob([lines.join("\n") + "\n"], { type: "text/plain" }), baseName() + ".obj");
+};
+
+// ---------------------------------------------------------------- FBX
+$("fbxSize").onchange = () => { $("fbxCustomBox").hidden = $("fbxSize").value !== "custom"; };
+const fmtSize = n => n < 1048576 ? fmtNum(Math.max(1, Math.round(n / 1024))) + " KB" : (n / 1048576).toFixed(1) + " MB";
+$("fbx").onclick = async () => {
+  if (!model) return;
+  const sel = $("fbxSize").value, cm = +$("fbxCustom").value;
+  if (sel === "custom" && !(cm >= 0.1 && cm <= 10000)) { setMsg("fbxMsg", [["fbxBadSize"]], true); return; }
+  const size = sel === "custom" ? cm / 100 : +sel;
+  const btn = $("fbx");
+  btn.disabled = true;
+  setMsg("fbxMsg", [["fbxBusy"]]);
+  await new Promise(r => setTimeout(r, 20));   // let the message show before the work
+  try {
+    const base = baseName();
+    const r = await makeFbx(model, { size, merge: $("fbxMerge").checked, origin: $("fbxOrigin").value, mode: $("fbxMode").value, name: base });
+    download(new Blob([r.bytes], { type: "application/octet-stream" }), base + ".fbx");
+    window.lastFbx = { quads: r.quads, vertices: r.vertices, materials: r.materials, colors: r.colors, bytes: r.bytes.length };
+    setMsg("fbxMsg", [["fbxDone", { q: r.quads, t: r.quads * 2, v: r.vertices, mats: r.materials, size: fmtSize(r.bytes.length) }]]);
+  } catch (e) {
+    setMsg("fbxMsg", errParts(e), true);
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+// ---------------------------------------------------------------- .vox -> BLK1
+let voxModel = null;
+$("voxFile").onchange = async e => {
+  const file = e.target.files[0];
+  setMsg("voxMsg", null);
+  $("copy").disabled = true; $("voxPreview").disabled = true; $("voxOut").value = "";
+  if (!file) return;
+  try {
+    const dv = new DataView(await file.arrayBuffer());
+    const tag = o => String.fromCharCode(dv.getUint8(o), dv.getUint8(o + 1), dv.getUint8(o + 2), dv.getUint8(o + 3));
+    if (dv.byteLength < 20 || tag(0) !== "VOX ") throw new CodeError("eNotVox");
+    let size = null, xyzi = null, rgba = null, models = 0;
+    let o = 8;
+    while (o + 12 <= dv.byteLength) {
+      const id = tag(o), len = dv.getInt32(o + 4, true), kids = dv.getInt32(o + 8, true);
+      const body = o + 12;
+      if (id === "MAIN") { o = body + len; continue; }   // children follow directly
+      if (id === "SIZE") { models++; if (!size) size = [dv.getInt32(body, true), dv.getInt32(body + 4, true), dv.getInt32(body + 8, true)]; }
+      else if (id === "XYZI" && !xyzi) xyzi = body;
+      else if (id === "RGBA" && !rgba) rgba = body;
+      o = body + len + kids;
+    }
+    if (!size || xyzi === null) throw new CodeError("eNoModel");
+    const [w, d, h] = size;   // vox x, y (depth), z (height)
+    if (w > 100 || d > 100 || h > 100) throw new CodeError("eTooBig", { w, d, h });
+    const count = dv.getInt32(xyzi, true);
+    const used = new Map(), pal = [null], idx = new Uint8Array(w * h * d);
+    const colorOf = ci => {
+      if (rgba !== null) { const b = rgba + (ci - 1) * 4; return [dv.getUint8(b), dv.getUint8(b + 1), dv.getUint8(b + 2)]; }
+      return DEFAULT_VOX_COLOR(ci);
+    };
+    for (let i = 0; i < count; i++) {
+      const b = xyzi + 4 + i * 4;
+      const x = dv.getUint8(b), y = dv.getUint8(b + 1), z = dv.getUint8(b + 2), ci = dv.getUint8(b + 3);
+      if (x >= w || y >= d || z >= h || ci === 0) continue;
+      let p = used.get(ci);
+      if (p === undefined) { pal.push(colorOf(ci)); p = pal.length - 1; used.set(ci, p); }
+      idx[x + w * (y + d * z)] = p;
+    }
+    voxModel = { w, h, d, pal, idx };
+    $("voxOut").value = encodeBlk(voxModel);
+    $("copy").disabled = false; $("voxPreview").disabled = false;
+    const parts = [["voxInfo", { w, d, h, n: count, k: pal.length - 1, len: $("voxOut").value.length }]];
+    if (models > 1) parts.push(["voxMulti", { m: models }]);
+    setMsg("voxMsg", parts);
+  } catch (err) {
+    setMsg("voxMsg", errParts(err), true);
+  }
+};
+// MagicaVoxel's built-in palette, used only when a file has no RGBA chunk (rare)
+function DEFAULT_VOX_COLOR(ci) {
+  const i = ci - 1;
+  if (i < 215) { const r = 5 - Math.floor(i / 36), g = 5 - Math.floor(i / 6) % 6, b = 5 - i % 6; return [r * 51, g * 51, b * 51]; }
+  const ramp = [238, 221, 187, 170, 136, 119, 85, 68, 34, 17];
+  const j = i - 215, k = ramp[j % 10];
+  if (j < 10) return [k, 0, 0];
+  if (j < 20) return [0, k, 0];
+  if (j < 30) return [0, 0, k];
+  return [k, k, k];
+}
+$("copy").onclick = async () => {
+  const t = $("voxOut");
+  try { await navigator.clipboard.writeText(t.value); setMsg("voxMsg", [["copied"]]); }
+  catch { t.select(); document.execCommand("copy"); setMsg("voxMsg", [["copiedShort"]]); }
+};
+$("voxPreview").onclick = () => { if (voxModel) { $("code").value = $("voxOut").value; setModel(voxModel, ".vox: "); window.scrollTo({ top: 0, behavior: "smooth" }); } };
+
+applyLang();
+show();
+</script>
+</body>
+</html>
